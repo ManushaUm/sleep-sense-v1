@@ -1,0 +1,36 @@
+# ─────────────────────────────────────────
+# SleepSense — Core Dependencies
+# ─────────────────────────────────────────
+
+# Data handling
+pandas>=2.0.0
+numpy>=1.24.0
+pyarrow>=12.0.0          # Parquet read/write
+
+# Machine learning
+scikit-learn>=1.3.0
+xgboost>=2.0.0
+lightgbm>=4.0.0          # optional alternative to XGBoost
+shap>=0.44.0             # explainability
+
+# API backend
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.0.0
+python-multipart>=0.0.9  # for form uploads
+
+# Database
+sqlalchemy>=2.0.0
+
+# Visualization (notebooks + Streamlit)
+matplotlib>=3.7.0
+seaborn>=0.12.0
+plotly>=5.18.0
+
+# Frontend
+streamlit>=1.32.0
+
+# Utilities
+python-dateutil>=2.8.0
+tqdm>=4.66.0
+joblib>=1.3.0            # model serialization

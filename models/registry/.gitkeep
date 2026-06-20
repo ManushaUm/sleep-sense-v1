@@ -1,0 +1,9 @@
+# This directory stores trained model artifacts and experiment logs.
+# Contents:
+#   xgboost_model.pkl       — primary prediction model
+#   rf_model.pkl            — random forest (for SHAP comparison)
+#   isoforest_model.pkl     — anomaly detection model
+#   feature_scaler.pkl      — StandardScaler fitted on training set
+#   feature_importance.json — global SHAP feature importances
+#   experiments.csv         — experiment tracking (hyperparams, metrics)
+#   sleepsense.db           — SQLite database

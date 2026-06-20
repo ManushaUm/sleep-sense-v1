@@ -1,0 +1,63 @@
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+*.so
+*.dylib
+
+# ─── Virtual environments ─────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.env
+
+# ─── Jupyter ──────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ─── Model artifacts (large binary files — keep registry dir, ignore files) ───
+models/registry/*.pkl
+models/registry/*.db
+models/registry/experiments.csv
+# keep directory structure
+!models/registry/.gitkeep
+
+# ─── Preprocessed data (generated — do not commit large outputs) ──────────────
+data/preprocessed/features/*.csv
+data/preprocessed/targets/*.csv
+data/preprocessed/merged/*.parquet
+# keep directory structure
+!data/preprocessed/features/.gitkeep
+!data/preprocessed/targets/.gitkeep
+!data/preprocessed/merged/.gitkeep
+
+# ─── Raw data (large dataset — do not commit raw CSVs) ───────────────────────
+data/raw/*
+!data/raw/notes.csv
+
+# ─── IDE / OS ─────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ─── Logs & temp ──────────────────────────────────────────────────────────────
+*.log
+tmp/
+temp/
+.cache/
+
+# ─── Streamlit ────────────────────────────────────────────────────────────────
+.streamlit/secrets.toml
