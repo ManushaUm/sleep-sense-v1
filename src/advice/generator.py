@@ -9,16 +9,18 @@ try:
 except Exception:
     pass
 
-def generate_advice(top_shap_features: list[dict]) -> list[str]:
+def generate_advice(top_shap_features: list[dict], calendar_events: list[dict] = None) -> list[str]:
     """
     Generate actionable sleep advice based on the top 3 SHAP features and their values
-    using a systematic, few-shot prompt-engineered Transformer (or CoT fallback).
+    and tomorrow's calendar events using a systematic, few-shot prompt-engineered Gemini (or CoT fallback).
     
     Args:
         top_shap_features: A list of dicts:
             [{'feature': str, 'shap_value': float, 'feature_value': float}]
+        calendar_events: A list of dicts representing calendar events.
             
     Returns:
         List of 3 advice strings.
     """
-    return llm_coach.generate_recommendations(top_shap_features)
+    return llm_coach.generate_recommendations(top_shap_features, calendar_events)
+

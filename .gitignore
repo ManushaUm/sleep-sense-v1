@@ -61,3 +61,13 @@ temp/
 
 # ─── Streamlit ────────────────────────────────────────────────────────────────
 .streamlit/secrets.toml
+
+# ─── Terraform ────────────────────────────────────────────────────────────────
+terraform/*.tfvars
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars.json
+tfplan
+*~backup
+*.exe

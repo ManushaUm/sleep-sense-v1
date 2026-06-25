@@ -7,14 +7,21 @@ class UserCreate(BaseModel):
     psqi_post_score: Optional[float] = Field(None, description="Post-study PSQI score")
     personality: Optional[Dict[str, float]] = Field(None, description="Big Five personality scores dict")
 
+class CalendarEventInput(BaseModel):
+    summary: str = Field(..., description="Calendar event title")
+    start_time: str = Field(..., description="ISO 8601 start timestamp")
+    end_time: str = Field(..., description="ISO 8601 end timestamp")
+
 class UserResponse(BaseModel):
     user_id: str
     psqi_pre_score: Optional[float] = None
     psqi_post_score: Optional[float] = None
     personality: Optional[Dict[str, float]] = None
+    profile_picture_url: Optional[str] = None
 
     class Config:
         from_attributes = True
+
 
 class DailyFeaturesInput(BaseModel):
     # Lock / unlock
@@ -76,6 +83,10 @@ class DailyFeaturesInput(BaseModel):
     nlp_caffeine_similarity: float = 0.0
     nlp_screen_similarity: float = 0.0
     nlp_stress_similarity: float = 0.0
+    
+    # Calendar Events
+    calendar_events: Optional[List[CalendarEventInput]] = None
+
 
 class PredictionResponse(BaseModel):
     user_id: Optional[str] = None
@@ -98,3 +109,25 @@ class PredictionHistoryItem(BaseModel):
 
     class Config:
         from_attributes = True
+
+class UserRegister(BaseModel):
+    user_id: str = Field(..., description="Unique user identifier, e.g. u00")
+    password: str = Field(..., description="User password")
+    psqi_pre_score: Optional[float] = Field(None, description="Pre-study PSQI score")
+    psqi_post_score: Optional[float] = Field(None, description="Post-study PSQI score")
+    personality: Optional[Dict[str, float]] = Field(None, description="Big Five personality scores dict")
+
+class UserLogin(BaseModel):
+    user_id: str = Field(..., description="Unique user identifier, e.g. u00")
+    password: str = Field(..., description="User password")
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user_id: str
+    profile_picture_url: Optional[str] = None
+
+class GoogleLoginRequest(BaseModel):
+    id_token: str = Field(..., description="Google ID Token JWT")
+
+

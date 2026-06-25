@@ -8,7 +8,7 @@ def get_user(db: Session, user_id: str):
 def get_all_users(db: Session):
     return db.query(models.User).all()
 
-def create_or_update_user(db: Session, user_id: str, psqi_pre_score: float = None, psqi_post_score: float = None, personality_dict: dict = None):
+def create_or_update_user(db: Session, user_id: str, psqi_pre_score: float = None, psqi_post_score: float = None, personality_dict: dict = None, hashed_password: str = None, profile_picture_url: str = None):
     db_user = get_user(db, user_id)
     p_json = json.dumps(personality_dict) if personality_dict else None
     
@@ -19,12 +19,18 @@ def create_or_update_user(db: Session, user_id: str, psqi_pre_score: float = Non
             db_user.psqi_post_score = psqi_post_score
         if p_json is not None:
             db_user.personality_json = p_json
+        if hashed_password is not None:
+            db_user.hashed_password = hashed_password
+        if profile_picture_url is not None:
+            db_user.profile_picture_url = profile_picture_url
     else:
         db_user = models.User(
             user_id=user_id,
+            hashed_password=hashed_password,
             psqi_pre_score=psqi_pre_score,
             psqi_post_score=psqi_post_score,
-            personality_json=p_json
+            personality_json=p_json,
+            profile_picture_url=profile_picture_url
         )
         db.add(db_user)
         
@@ -40,11 +46,19 @@ def get_daily_features(db: Session, user_id: str, date: str):
 
 def create_or_update_daily_features(db: Session, user_id: str, date: str, features_dict: dict):
     db_feat = get_daily_features(db, user_id, date)
-    f_json = json.dumps(features_dict)
     
     if db_feat:
+        try:
+            existing = json.loads(db_feat.features_json)
+        except Exception:
+            existing = {}
+        # Merge: update existing features with newly provided non-None keys
+        existing.update({k: v for k, v in features_dict.items() if v is not None})
+        f_json = json.dumps(existing)
         db_feat.features_json = f_json
     else:
+        # Keep only non-None values for initial creation to let Pydantic defaults handle rest
+        f_json = json.dumps({k: v for k, v in features_dict.items() if v is not None})
         db_feat = models.DailyFeatures(
             user_id=user_id,
             date=date,

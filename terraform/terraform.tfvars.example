@@ -1,0 +1,6 @@
+# Copy this file to terraform.tfvars and fill in your actual values
+# DO NOT commit terraform.tfvars to git control!
+
+project_id  = "your-gcp-project-id-here"
+region      = "us-central1"
+db_password = "choose-a-strong-postgres-password-here"

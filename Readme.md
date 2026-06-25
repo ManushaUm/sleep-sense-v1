@@ -1,143 +1,177 @@
-# SleepSense 🌙
+# SleepSense 🌙 — Backend ML & API Platform
 
-> **Passive Sleep Quality Predictor from Daytime Behavior**
-> Predict tonight's sleep quality from your smartphone's daytime signals — no wearables required.
+> **Predicting Sleep Quality from Daytime Smartphone Behavior**
 
----
-
-## What is SleepSense?
-
-Most sleep research focuses on what happens *at night*. SleepSense argues that **your day predicts your night**.
-
-The science is well-established: cortisol levels, physical activity, light exposure timing, caffeine-related behavior, and social interaction patterns during the day are all strong predictors of sleep onset latency and sleep quality that night. You don't need to watch someone sleep to know they'll sleep badly.
-
-SleepSense uses the [StudentLife dataset](http://studentlife.cs.dartmouth.edu/) (Dartmouth College, 2013 — 49 participants, 10 weeks) to train a machine learning model that:
-1. Reads daytime behavioral signals (phone usage timing, physical activity, stress, social interaction)
-2. Predicts a **sleep quality score** (0–3 continuous, mapped to Very good / Fairly good / Fairly bad / Very bad)
-3. Generates **actionable suggestions** to improve tonight's sleep — powered by SHAP explainability
+Welcome to the backend platform for **SleepSense**, an AI-powered behavioral health system. This platform uses passive smartphone telemetry (like phone usage, movement, and physical activity) alongside subjective daily diaries to predict nightly sleep quality without requiring wearable sensors (like smartwatches or rings).
 
 ---
 
-## Architecture
+## 1. The Core Science & Working Principle
 
-```
-Streamlit Dashboard / React (future)
-         ↓ REST API
-     FastAPI Backend (multi-user)
-    ┌────────────────────────────┐
-    │  Prediction (XGB + RF)     │
-    │  Advice (DistilGPT2 LLM)   │
-    │  Anomaly (IsoF. + PyTorch) │
-    └──────────┬─────────────────┘
-         SQLite + Model Registry
-         ETL Pipeline
-    data/raw/ → data/preprocessed/
-```
+Most sleep systems monitor you *while you sleep*. SleepSense works on a different principle: **your daytime habits predict your night's rest.**
 
-See [`docs/architecture.md`](docs/architecture.md) for full detail.
+Your daily routines directly regulate sleep patterns:
+* **Circadian Rhythm**: The time you first unlock your phone in the morning and last lock it at night maps your wake/sleep alignment.
+* **Homeostatic Sleep Drive**: Your active walking/running minutes build physical tiredness (adenosine accumulation), deepening slow-wave sleep.
+* **Cortisol & Stress**: Self-reported stress and screen interaction frequencies (frequent unlocks) trigger state arousal, raising cortisol and delaying sleep onset.
+* **Environment & Social Context**: Spending time in noisy environments (low silence ratio) or isolating yourself correlates with sleep disruptions.
+
+SleepSense trains machine learning models on the **StudentLife dataset** (Dartmouth College, 2013 — tracking 49 participants over 10 weeks) to predict nightly sleep scores (0.0 to 3.0) and generate actionable recommendations.
 
 ---
 
-## Dataset
+## 2. End-to-End Data & Execution Flow
 
-**StudentLife** — Dartmouth College, 2013
+Below is the step-by-step lifecycle of a single prediction request:
 
-| Modality | Files | Signal |
-|----------|-------|--------|
-| `data/raw/EMA/response/Sleep/` | 49 JSONs | **Target**: daily sleep quality rating |
-| `data/raw/sensing/activity/` | 49 CSVs | Physical activity (stationary/walking/running) |
-| `data/raw/sensing/phonelock/` | 49 CSVs | Phone lock/unlock → screen time + late-night use |
-| `data/raw/sensing/audio/` | 49 CSVs | Ambient sound → conversation proxy |
-| `data/raw/app_usage/` | 49 CSVs | Foreground app → social media, study, entertainment timing |
-| `data/raw/sensing/gps/` | 49 CSVs | Location entropy → mobility |
-| `data/raw/survey/psqi.csv` | 1 CSV | PSQI baseline (used as static user feature) |
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Mobile App / Client
+    participant API as FastAPI Router (app/api/)
+    participant DB as SQLite Database (src/db/)
+    participant ML as XGBoost Regression (src/models/)
+    participant IF as Isolation Forest (src/models/)
+    participant SHAP as SHAP Explainer (src/evaluation/)
+    participant Advice as Sleep Coach (src/advice/)
 
----
-
-## Setup
-
-### Prerequisites
-- [Anaconda](https://www.anaconda.com/) or Miniconda
-- Python 3.10+
-
-### 1. Activate the environment
-```bash
-conda activate sleepsense-ai
-```
-
-### 2. Install dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 3. (Dev) Install dev tools
-```bash
-pip install -r requirements-dev.txt
+    User->>API: POST /predict/{user_id} (Token + Features Payload)
+    API->>DB: Save/update daily feature inputs
+    Note over API,DB: If no features are sent, API pulls from DB or CSV cache
+    
+    API->>ML: Pass daily features through XGBoost Pipeline
+    ML-->>API: Return Sleep Score (0.0 - 3.0) & Quality Label
+    
+    API->>IF: Pass features through Isolation Forest
+    IF-->>API: Return Anomaly Flag (0 = Normal, 1 = Unusual Routine)
+    
+    API->>SHAP: Calculate SHAP values for the prediction
+    SHAP-->>API: Return Top 3 Sleep Drivers (Helps vs Disruptors)
+    
+    API->>Advice: Pass Top 3 drivers into Advisor Engine
+    Advice-->>API: Generate 3 customized coaching recommendations
+    
+    API->>DB: Record prediction, anomaly, SHAP drivers, & advice history
+    API-->>User: JSON Response (Score, Label, Anomaly Flag, SHAP Bars, Advice)
 ```
 
 ---
 
-## Running the Project
+## 3. Machine Learning Concepts (In Simple Terms)
 
-### Run the EDA notebook
-```bash
-conda activate sleepsense-ai
-jupyter notebook notebooks/01_data_exploration.ipynb
-```
+To help you understand how the backend works under the hood, here are the core models explained simply:
 
-### Run the Streamlit dashboard
-```bash
-conda activate sleepsense-ai
-streamlit run app/frontend/streamlit_app.py
-```
+### A. XGBoost Regression (Sleep Score Predictor)
+* **What it does**: Predicts a continuous score between `0.0` (worst sleep) and `3.0` (best sleep), which is then mapped to labels:
+  * `>= 2.5`: *Very good*
+  * `1.5 to 2.5`: *Fairly good*
+  * `0.5 to 1.5`: *Fairly bad*
+  * `< 0.5`: *Very bad*
+* **How it works**: XGBoost builds a sequence of small decision trees. Each new tree corrects the mathematical errors made by the previous trees. It combines passive parameters (like walking minutes or phone unlocks) with static indicators (like pre-study PSQI baseline scores) to forecast your sleep quality.
 
-### Start the FastAPI backend
-```bash
-conda activate sleepsense-ai
-uvicorn app.api.main:app --reload --port 8000
-```
+### B. Isolation Forest (Personalized Anomaly Detection)
+* **What it does**: Identifies whether a user's daytime routine today is significantly different from their historical baseline (sets `anomaly_flag` to `1` for unusual routines, `0` for normal).
+* **How it works**: The model randomly partitions features to isolate data points. If a day's habits are very unusual, the model can isolate that day in just a few partitions (short path length).
+* **Personalization**: The backend fits a **custom Isolation Forest model per user** if they have at least 5 days of history. If not, it falls back to a global model trained across all users.
 
-API docs available at: `http://localhost:8000/docs`
+### C. SHAP (Shapley Additive exPlanations)
+* **What it does**: Explains *why* the XGBoost model predicted a specific sleep score, identifying the top 3 lifestyle factors that helped or hurt today's sleep.
+* **How it works**: Derived from game theory, SHAP determines how much each feature pushes the prediction away from the global average baseline. For example, if you unlock your phone 15 times late at night, SHAP quantifies exactly how much that behavior reduced your predicted sleep score (e.g., `-0.22` points).
+* **Actionability**: Static features (like personality traits or the day of the week) are automatically excluded from SHAP consideration so that recommendations target only actionable behaviors (e.g. physical activity, screen usage).
+
+### D. Word2Vec NLP Embeddings (Journal Analyzer)
+* **What it does**: Scans the user's subjective text journal entries (e.g., "drank coffee at 4 PM, studied for exams") and extracts numerical features representing caffeine intake, screen time, and stress.
+* **How it works**: It maps words to high-dimensional vector spaces. By calculating similarity scores between user notes and target keywords (like 'coffee', 'screen', or 'anxious'), it transforms text notes into numerical metrics that the XGBoost model can use.
 
 ---
 
-## Project Structure
+## 4. Repository Code Structure & Components
+
+Here is a breakdown of what each directory does:
 
 ```
 SleepSense/
-├── data/raw/              StudentLife original data (untouched)
-├── data/preprocessed/     Pipeline output (feature vectors, targets, merged dataset)
-├── notebooks/             Jupyter notebooks (EDA → features → models → results)
-├── src/
-│   ├── data/              Data loaders, preprocessor, feature store
-│   ├── features/          Per-modality feature extractors
-│   ├── models/            Baseline, XGBoost, Isolation Forest, trainer
-│   ├── evaluation/        Metrics and SHAP explainability
-│   ├── advice/            Advice generation engine
-│   └── db/                SQLite ORM and CRUD helpers
-├── app/
-│   ├── api/               FastAPI backend (routers, schemas)
-│   └── frontend/          Streamlit dashboard
-├── models/registry/       Saved model artifacts + SQLite DB
-├── implementation/        Project plan and progress tracker
-└── docs/                  Architecture documentation
+├── app/                           # Backend API & Admin Web Interface
+│   ├── api/                       # FastAPI Server Framework
+│   │   ├── main.py                # Server Entry Point & Router Registry
+│   │   ├── schemas.py             # Data validation contracts (Pydantic)
+│   │   ├── security.py            # JWT token validation & password hashing
+│   │   └── routers/               # Endpoint Groups (/auth, /predict, /history, /advice)
+│   └── frontend/                  # Streamlit Web Dashboard
+│
+├── src/                           # Core Machine Learning & Logic Pipelines
+│   ├── data/                      # Data Processing Layer
+│   │   ├── loader.py              # Raw StudentLife JSON/CSV file parsers
+│   │   ├── preprocessor.py        # Timestamp alignments & label converters
+│   │   └── feature_store.py       # Combines sensory logs & surveys into feature matrices
+│   │
+│   ├── features/                  # Modality Feature Extractors (Sensing -> Math features)
+│   │   ├── activity_features.py   # Walking/running/stationary times
+│   │   ├── app_usage_features.py  # Entertainment, social, and study screen sessions
+│   │   ├── audio_features.py      # Noise levels & conversation ratios
+│   │   ├── gps_features.py        # Location counts & mobility radius
+│   │   ├── phonelock_features.py  # Daytime vs late-night screen pickup counts
+│   │   ├── ema_features.py        # Mood & stress EMA survey averages
+│   │   └── notes_nlp.py           # Word2Vec extractor for daily text logs
+│   │
+│   ├── models/                    # AI Modeling Layer
+│   │   ├── regression.py          # XGBoost & Random Forest pipeline configurations
+│   │   ├── anomaly.py             # User-specific Isolation Forest model
+│   │   └── trainer.py             # Training loop, grid searches, & saving pipeline models
+│   │
+│   ├── evaluation/                # Model Explainability & Quality Metrics
+│   │   ├── explainability.py      # Computes local SHAP values for predictions
+│   │   └── metrics.py             # MSE, R2, Accuracy metrics calculators
+│   │
+│   ├── db/                        # Local Relational Database Schema
+│   │   ├── database.py            # SQLAlchemy SQLite connection setup
+│   │   ├── models.py              # SQL tables (User, DailyFeatures, Prediction)
+│   │   └── crud.py                # Database queries (CRUD operations)
+│   │
+│   └── advice/                    # Sleep Coaching Recommendation Engine
+│       ├── generator.py           # Unified entry point for recommendations
+│       └── llm_generator.py       # Rule-CoT advice templates & local Transformer setup
+│
+├── models/registry/               # Serialized model pickle files (.pkl)
+└── data/                          # Raw & preprocessed datasets (omitted from git)
 ```
 
 ---
 
-## Implementation Progress
+## 5. Setup & Running Instructions
 
-See [`implementation/progress.md`](implementation/progress.md) for the live progress tracker.
+### Prerequisites
+* [Anaconda](https://www.anaconda.com/) or Miniconda
+* Python 3.10+
 
----
+### Step 1: Environment Activation
+Activate the conda environment configured for the project:
+```bash
+conda activate sleepsense-ai
+```
 
-## Key Design Decisions
+### Step 2: Install Project Dependencies
+Install standard requirements and development tools:
+```bash
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+```
 
-| Decision | Choice | Reason |
-|----------|--------|--------|
-| Target variable | Daily EMA sleep rating | ~1,500 samples vs. 90 from PSQI |
-| Model | XGBoost regression (0–3) | Best accuracy on tabular data; SHAP-compatible |
-| Explainability | SHAP TreeExplainer | Per-prediction top-3 feature attribution |
-| Database | SQLite + SQLAlchemy | Zero-setup; trivial PostgreSQL migration |
-| Frontend | Streamlit → React | Fast iteration then polish |
-| Mobile app | Not required | REST API is mobile-ready by design |
+### Step 3: Run the FastAPI Server
+Launch the backend server locally (listens on port 8000 by default):
+```bash
+uvicorn app.api.main:app --reload --port 8000
+```
+* **Interactive Documentation (Swagger)**: Once running, visit [http://localhost:8000/docs](http://localhost:8000/docs) to test API endpoints.
+
+### Step 4: Run the Streamlit Dashboard
+To view predicted metrics and explainable data graphs through the web dashboard, run:
+```bash
+streamlit run app/frontend/streamlit_app.py
+```
+
+### Step 5: Run Unit and Integration Tests
+To verify all components work correctly, run the test suite:
+```bash
+pytest
+```

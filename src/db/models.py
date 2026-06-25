@@ -6,9 +6,11 @@ class User(Base):
     __tablename__ = "users"
     
     user_id = Column(String, primary_key=True, index=True)
+    hashed_password = Column(String, nullable=True)
     psqi_pre_score = Column(Float, nullable=True)
     psqi_post_score = Column(Float, nullable=True)
     personality_json = Column(String, nullable=True) # JSON string of BigFive traits
+    profile_picture_url = Column(String, nullable=True)
 
 class DailyFeatures(Base):
     __tablename__ = "daily_features"

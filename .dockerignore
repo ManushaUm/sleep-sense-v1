@@ -1,0 +1,31 @@
+# Exclude git history and metadata
+.git
+.gitignore
+
+# Exclude Terraform infrastructure files
+/terraform/
+
+# Exclude local database and datasets (stored in GCP Cloud SQL in prod)
+/data/
+**/*.db
+**/*.sqlite
+
+# Exclude testing and cache files
+.pytest_cache/
+/tests/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# Exclude local environments and settings
+.env
+.env.*
+/.venv/
+/venv/
+/env/
+
+# Exclude development assets and notebooks
+/notebooks/
+/docs/
+*.md

@@ -6,12 +6,34 @@ from sqlalchemy.orm import Session
 from src.db.database import engine, Base, get_db
 from src.db import crud, models
 from src.data.feature_store import build_dataset
-from app.api.routers import health, predict, advice, history
+from app.api.routers import health, predict, advice, history, auth
 from app.api import schemas
 from src.data.preprocessor import score_to_label
 
 # Create database tables at startup
 Base.metadata.create_all(bind=engine)
+
+# Auto migration: Ensure hashed_password column exists in users table
+from sqlalchemy import text
+with engine.begin() as conn:
+    try:
+        conn.execute(text("SELECT hashed_password FROM users LIMIT 1"))
+    except Exception:
+        try:
+            conn.execute(text("ALTER TABLE users ADD COLUMN hashed_password TEXT"))
+        except Exception:
+            pass
+
+# Auto migration: Ensure profile_picture_url column exists in users table
+with engine.begin() as conn:
+    try:
+        conn.execute(text("SELECT profile_picture_url FROM users LIMIT 1"))
+    except Exception:
+        try:
+            conn.execute(text("ALTER TABLE users ADD COLUMN profile_picture_url TEXT"))
+        except Exception:
+            pass
+
 
 app = FastAPI(
     title="SleepSense API",
@@ -30,6 +52,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(health.router)
+app.include_router(auth.router)
 app.include_router(predict.router)
 app.include_router(advice.router)
 app.include_router(history.router)
@@ -45,7 +68,8 @@ def list_users(db: Session = Depends(get_db)):
             user_id=u.user_id,
             psqi_pre_score=u.psqi_pre_score,
             psqi_post_score=u.psqi_post_score,
-            personality=p_dict
+            personality=p_dict,
+            profile_picture_url=u.profile_picture_url
         ))
     return response
 

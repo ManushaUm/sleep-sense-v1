@@ -112,23 +112,39 @@ class NotesNLPExtractor:
         
     def fit_word2vec(self):
         """Train a Word2Vec model on the corpus of all user notes."""
-        generate_simulated_notes_if_missing()
-        if not NOTES_CSV_PATH.exists():
-            return
-            
-        self.notes_df = pd.read_csv(NOTES_CSV_PATH)
-        sentences = [preprocess_text(str(note)) for note in self.notes_df['note_text'].values]
-        
-        # Train Word2Vec
-        self.model = Word2Vec(
-            sentences=sentences,
-            vector_size=self.vector_size,
-            window=self.window,
-            min_count=1,
-            workers=1,
-            seed=42
-        )
-        print("Trained Word2Vec embedding model successfully.")
+        try:
+            generate_simulated_notes_if_missing()
+            if not NOTES_CSV_PATH.exists():
+                print("Warning: notes.csv does not exist. Skipping Word2Vec training.")
+                return
+                
+            try:
+                self.notes_df = pd.read_csv(NOTES_CSV_PATH)
+            except pd.errors.EmptyDataError:
+                print("Warning: notes.csv is empty. Skipping Word2Vec training.")
+                return
+                
+            if self.notes_df is None or self.notes_df.empty or 'note_text' not in self.notes_df.columns:
+                print("Warning: No note_text column or data found in notes.csv. Skipping Word2Vec training.")
+                return
+                
+            sentences = [preprocess_text(str(note)) for note in self.notes_df['note_text'].values]
+            if not sentences or all(len(s) == 0 for s in sentences):
+                print("Warning: No words found for training Word2Vec. Skipping.")
+                return
+                
+            # Train Word2Vec
+            self.model = Word2Vec(
+                sentences=sentences,
+                vector_size=self.vector_size,
+                window=self.window,
+                min_count=1,
+                workers=1,
+                seed=42
+            )
+            print("Trained Word2Vec embedding model successfully.")
+        except Exception as e:
+            print(f"Warning: Failed to train Word2Vec model during startup: {e}")
 
     def get_document_embedding(self, words: list[str]) -> np.ndarray:
         """Calculate average word embedding for a list of words."""

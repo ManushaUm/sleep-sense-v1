@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pathlib import Path
 
-from app.api import schemas
+from app.api import schemas, security
 from src.db.database import get_db
-from src.db import crud
+from src.db import crud, models
 from src.data.preprocessor import score_to_label
 from src.evaluation.explainability import get_top_3_shap_contributors
 from src.advice.generator import generate_advice
@@ -33,8 +33,10 @@ def predict_anonymous(features: schemas.DailyFeaturesInput):
     if xgb_model is None:
         raise HTTPException(status_code=500, detail="XGBoost model is not loaded in model registry.")
         
-    # Convert input to DataFrame (1 row) and align column order
+    # Convert input to DataFrame (1 row) and align column order (exclude calendar events)
     input_dict = features.dict()
+    calendar_events = input_dict.pop("calendar_events", None) or []
+    
     df_row = pd.DataFrame([input_dict])
     if hasattr(xgb_model, 'feature_names_in_'):
         df_row = df_row[list(xgb_model.feature_names_in_)]
@@ -47,13 +49,20 @@ def predict_anonymous(features: schemas.DailyFeaturesInput):
     # Get top 3 SHAP contributors
     try:
         top_features = get_top_3_shap_contributors(df_row)
-    except Exception:
+    except Exception as e:
+        import traceback
+        print("ERROR: SHAP calculation failed:")
+        traceback.print_exc()
         top_features = []
         
     # Generate sleep advice
     try:
-        advice_list = generate_advice(top_features)
-    except Exception:
+        raw_events = [ev.dict() if hasattr(ev, 'dict') else ev for ev in calendar_events]
+        advice_list = generate_advice(top_features, raw_events)
+    except Exception as e:
+        import traceback
+        print("ERROR: Advice generation failed:")
+        traceback.print_exc()
         advice_list = [
             "Maintain a consistent sleep schedule.",
             "Limit screen time 1 hour before bed.",
@@ -68,50 +77,67 @@ def predict_anonymous(features: schemas.DailyFeaturesInput):
         advice=advice_list
     )
 
+
+from typing import Optional
+
 @router.post("/predict/{user_id}", response_model=schemas.PredictionResponse, tags=["Predict"])
-def predict_user(user_id: str, date: str = Query(..., description="Date YYYY-MM-DD"), db: Session = Depends(get_db)):
+def predict_user(user_id: str, date: str = Query(..., description="Date YYYY-MM-DD"), features: Optional[schemas.DailyFeaturesInput] = None, db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_user)):
     """
     Predict sleep quality score, label, and anomaly status for a stored user and date.
-    Looks up daily features in database or preprocessed CSV cache, computes prediction,
-    saves it to predictions database table, and returns the response.
+    Optionally accepts daytime features payload to save to database before running prediction.
+    Otherwise looks up daily features in database or preprocessed CSV cache.
     """
+    if current_user.user_id != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized to access this user's data."
+        )
     if xgb_model is None:
         raise HTTPException(status_code=500, detail="XGBoost model is not loaded in model registry.")
         
-    # 1. Look up daily features
-    db_feat = crud.get_daily_features(db, user_id, date)
     import json
     
-    if db_feat:
-        features_dict = json.loads(db_feat.features_json)
+    calendar_events = []
+    if features is not None:
+        features_dict = features.dict(exclude_unset=True)
+        calendar_events = features_dict.pop("calendar_events", None) or []
+        crud.create_or_update_daily_features(db, user_id, date, features_dict)
     else:
-        # Try local CSV cache
-        csv_path = FEATURES_DIR / f"{user_id}_features.csv"
-        if not csv_path.exists():
-            raise HTTPException(
-                status_code=404, 
-                detail=f"Daily features not found for user {user_id} in database or cache."
-            )
-        try:
-            df_user = pd.read_csv(csv_path)
-            # Find matching date
-            df_day = df_user[df_user['date'] == date]
-            if df_day.empty:
+        # 1. Look up daily features
+        db_feat = crud.get_daily_features(db, user_id, date)
+        if db_feat:
+            features_dict = json.loads(db_feat.features_json)
+            calendar_events = features_dict.pop("calendar_events", None) or []
+        else:
+            # Try local CSV cache
+            csv_path = FEATURES_DIR / f"{user_id}_features.csv"
+            if not csv_path.exists():
                 raise HTTPException(
-                    status_code=404,
-                    detail=f"No features found for user {user_id} on date {date} in cache."
+                    status_code=404, 
+                    detail=f"Daily features not found for user {user_id} in database or cache."
                 )
-            # Convert row to dictionary (ignoring non-feature target columns)
-            exclude_cols = ['user_id', 'date', 'sleep_score']
-            features_dict = {c: float(df_day.iloc[0][c]) for c in df_day.columns if c not in exclude_cols}
-        except Exception as e:
-            if isinstance(e, HTTPException):
-                raise e
-            raise HTTPException(status_code=500, detail=f"Error reading user features cache: {str(e)}")
+            try:
+                df_user = pd.read_csv(csv_path)
+                # Find matching date
+                df_day = df_user[df_user['date'] == date]
+                if df_day.empty:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"No features found for user {user_id} on date {date} in cache."
+                    )
+                # Convert row to dictionary (ignoring non-feature target columns)
+                exclude_cols = ['user_id', 'date', 'sleep_score']
+                features_dict = {c: float(df_day.iloc[0][c]) for c in df_day.columns if c not in exclude_cols}
+            except Exception as e:
+                if isinstance(e, HTTPException):
+                    raise e
+                raise HTTPException(status_code=500, detail=f"Error reading user features cache: {str(e)}")
             
-    # Convert features to 1-row DataFrame and align column order
+    # Convert features to 1-row DataFrame and align column order (exclude calendar events)
     validated_features = schemas.DailyFeaturesInput(**features_dict)
-    df_row = pd.DataFrame([validated_features.dict()])
+    val_dict = validated_features.dict()
+    val_dict.pop("calendar_events", None)
+    df_row = pd.DataFrame([val_dict])
     if hasattr(xgb_model, 'feature_names_in_'):
         df_row = df_row[list(xgb_model.feature_names_in_)]
     
@@ -134,13 +160,20 @@ def predict_user(user_id: str, date: str = Query(..., description="Date YYYY-MM-
     # 4. Get top 3 SHAP contributors
     try:
         top_features = get_top_3_shap_contributors(df_row)
-    except Exception:
+    except Exception as e:
+        import traceback
+        print("ERROR: SHAP calculation in predict_user failed:")
+        traceback.print_exc()
         top_features = []
         
     # 5. Generate sleep advice
     try:
-        advice_list = generate_advice(top_features)
-    except Exception:
+        raw_events = [ev.dict() if hasattr(ev, 'dict') else ev for ev in calendar_events]
+        advice_list = generate_advice(top_features, raw_events)
+    except Exception as e:
+        import traceback
+        print("ERROR: Advice generation in predict_user failed:")
+        traceback.print_exc()
         advice_list = [
             "Maintain a consistent sleep schedule.",
             "Limit screen time 1 hour before bed.",

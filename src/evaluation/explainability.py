@@ -52,6 +52,18 @@ def explain_dataset(X: pd.DataFrame, save_importance: bool = True) -> tuple:
         
     return explainer, shap_values, X_preprocessed
 
+# Non-actionable static or contextual features to exclude from sleep coaching advice
+EXCLUDE_FEATURES = {
+    'personality_extraversion',
+    'personality_agreeableness',
+    'personality_conscientiousness',
+    'personality_neuroticism',
+    'personality_openness',
+    'psqi_pre_score',
+    'day_of_week',
+    'is_weekend'
+}
+
 def get_top_3_shap_contributors(df_row: pd.DataFrame) -> list:
     """
     Find top 3 SHAP contributors (features driving the prediction away from baseline)
@@ -72,11 +84,15 @@ def get_top_3_shap_contributors(df_row: pd.DataFrame) -> list:
     shap_vals = explainer.shap_values(X_preprocessed)[0] # first row
     
     contributors = []
-    for col, val, shap_val in zip(df_row.columns, df_row.iloc[0], shap_vals):
+    for idx, (col, val, shap_val) in enumerate(zip(df_row.columns, df_row.iloc[0], shap_vals)):
+        if col in EXCLUDE_FEATURES:
+            continue
+        is_missing = val is None or pd.isna(val)
+        final_val = X_imputed[0][idx] if is_missing else val
         contributors.append({
             'feature': col,
             'shap_value': float(shap_val),
-            'feature_value': float(val)
+            'feature_value': float(final_val)
         })
         
     # Sort by absolute SHAP values descending

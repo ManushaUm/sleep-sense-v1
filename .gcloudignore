@@ -1,0 +1,25 @@
+# Ignore git directories
+.git
+.gitignore
+.gcloudignore
+
+# Ignore local datasets and cache databases
+/data/
+**/*.db
+**/*.sqlite
+
+# Ignore infrastructure configurations
+/terraform/
+
+# Ignore notebooks, tests, and docs
+/notebooks/
+/tests/
+/docs/
+.pytest_cache/
+**/__pycache__/
+**/*.pyc
+
+# Ignore local python environments
+/.venv/
+/venv/
+/env/
